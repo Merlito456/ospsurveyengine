@@ -1,67 +1,122 @@
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-
-// Prevention: Disable standard browser refresh keyboard shortcuts
-window.addEventListener('keydown', (e) => {
-  // Block F5
-  if (e.key === 'F5') {
-    e.preventDefault();
-    console.warn('Navigation blocked: Refreshing is disabled to protect active survey data.');
-  }
-  // Block Ctrl+R or Cmd+R
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
-    e.preventDefault();
-    console.warn('Navigation blocked: Refreshing is disabled to protect active survey data.');
-  }
-}, { capture: true });
-
-// Prevention: Warn user before leaving or reloading via standard UI
-window.addEventListener('beforeunload', (e) => {
-  // Standard way to trigger a "Confirm Reload" dialog in browsers
-  e.preventDefault();
-  e.returnValue = ''; 
-});
-
-// Register Service Worker with WebView-specific update logic
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    const protocol = window.location.protocol;
-    if (protocol !== 'http:' && protocol !== 'https:') return;
-
-    const href = window.location.href;
-    const swUrl = href.substring(0, href.lastIndexOf('/') + 1) + 'sw.js';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="metadata.json">
+  <title>OSP Survey Tool Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --secondary: #0f172a;
+      --accent: #10b981;
+    }
     
-    navigator.serviceWorker.register(swUrl)
-      .then(registration => {
-        console.log('Offline Protection Active');
-        
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // Background sync: The new version is ready for the next cold start
-              }
-            });
-          }
-        });
-      })
-      .catch(err => {
-        const isSandbox = window.location.hostname.includes('usercontent.goog') || 
-                          window.location.hostname.includes('ai.studio');
-        if (!isSandbox) console.error('Offline Sync Failed:', err);
-      });
-  });
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      width: 100%;
+      overflow: hidden;
+      position: fixed;
+      overscroll-behavior-y: contain;
+      overscroll-behavior-x: none;
+      touch-action: pan-x pan-y;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      background-color: #0f172a;
+      user-select: none;
+    }
+
+    .leaflet-container {
+      width: 100%;
+      height: 100%;
+      background-color: #f1f5f9;
+      outline: none;
+    }
+
+    .animate-slide-up {
+      transform: translate3d(0, 100%, 0);
+      animation: slideUpNative 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes slideUpNative {
+      to { transform: translate3d(0, 0, 0); }
+    }
+
+    .scroll-container {
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      overscroll-behavior: contain;
+    }
+    .scroll-container::-webkit-scrollbar {
+      display: none;
+    }
+
+    .custom-pole-label {
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      color: white;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 4px 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+    }
+
+    .btn-active:active {
+      transform: scale(0.96);
+      filter: brightness(0.9);
+      transition: all 0.1s ease;
+    }
+
+    .monospaced {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    input:focus, textarea:focus {
+      outline: none;
+      background-color: #fff !important;
+    }
+  </style>
+  <script>
+    // Environment shim for browser ESM execution
+    window.process = { env: { API_KEY: '' } };
+  </script>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4",
+    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
+    "jszip": "https://esm.sh/jszip@^3.10.1",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+  }
 }
-
-const rootElement = document.getElementById('root');
-if (!rootElement) throw new Error("Could not find root element");
-
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+</script>
+</head>
+<body class="text-slate-900 overflow-hidden antialiased bg-white">
+  <div id="root" class="h-full w-full"></div>
+  <!-- Explicit module entry point -->
+  <script type="module" src="./index.tsx"></script>
+</body>
+</html>
