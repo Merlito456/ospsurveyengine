@@ -1,7 +1,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App from './App.tsx';
 
 // Prevention: Disable standard browser refresh keyboard shortcuts
 window.addEventListener('keydown', (e) => {
