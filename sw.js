@@ -1,83 +1,89 @@
-const APP_CACHE = 'osp-app-v7';
-const TILE_CACHE = 'osp-map-tiles-v1';
 
-// Only precache files that ALWAYS exist
-const PRECACHE = [
+const CACHE_NAME = 'osp-survey-pro-v5-cache';
+const MAP_CACHE = 'osp-map-tiles';
+
+const PRECACHE_ASSETS = [
+  './',
   './index.html',
-  './manifest.json',
+  './metadata.json',
+  'https://cdn.tailwindcss.com',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:wght@100..800&display=swap'
 ];
 
-// ---------------- INSTALL ----------------
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(PRECACHE))
-  );
   self.skipWaiting();
-});
-
-// ---------------- ACTIVATE ----------------
-self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => ![APP_CACHE, TILE_CACHE].includes(key))
-          .map((key) => caches.delete(key))
-      )
-    )
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_ASSETS);
+    })
   );
-  self.clients.claim();
 });
 
-// ---------------- FETCH ----------------
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim());
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.filter(name => name !== CACHE_NAME && name !== MAP_CACHE).map(name => caches.delete(name))
+      );
+    })
+  );
+});
+
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  const url = new URL(req.url);
+  const url = new URL(event.request.url);
 
-  // Only handle GET requests
-  if (req.method !== 'GET') return;
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
 
-  // ---------------- MAP TILES ----------------
-  // Cache OpenStreetMap tiles (cache-first)
-  if (url.hostname.includes('tile.openstreetmap.org')) {
+  // Strategy for core app assets: CACHE FIRST
+  // This ensures the app is "immortal" even when signal is lost completely.
+  const isCoreAsset = PRECACHE_ASSETS.some(asset => event.request.url.includes(asset.replace('./', ''))) || 
+                     url.pathname.endsWith('.js') || 
+                     url.pathname.endsWith('.css');
+
+  if (isCoreAsset) {
     event.respondWith(
-      caches.open(TILE_CACHE).then(async (cache) => {
-        const cached = await cache.match(req);
-        if (cached) return cached;
-
-        try {
-          const fresh = await fetch(req);
-          cache.put(req, fresh.clone());
-          return fresh;
-        } catch {
-          return cached;
-        }
+      caches.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+          }
+          return networkResponse;
+        }).catch(() => cachedResponse);
+        return cachedResponse || fetchPromise;
       })
     );
     return;
   }
 
-  // ---------------- SPA NAVIGATION ----------------
-  // THIS IS THE CRITICAL FIX FOR /assets/ 404
-  if (req.mode === 'navigate') {
+  // Strategy for Map Tiles: Stale-While-Revalidate
+  if (url.hostname.includes('tile.openstreetmap.org')) {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          // If the response is NOT OK (404, 500, etc)
-          // always fall back to index.html
-          if (!res || !res.ok) {
-            return caches.match('./index.html');
-          }
-          return res;
-        })
-        .catch(() => caches.match('./index.html'))
+      caches.open(MAP_CACHE).then((cache) => {
+        return cache.match(event.request).then((response) => {
+          const fetchPromise = fetch(event.request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(event.request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => response);
+          return response || fetchPromise;
+        });
+      })
     );
     return;
   }
 
-  // ---------------- STATIC ASSETS ----------------
-  // JS / CSS / images — cache first
+  // Fallback: Cache-First for everything else to maximize offline resilience
   event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req))
+    caches.match(event.request).then((response) => {
+      return response || fetch(event.request).then((networkResponse) => {
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, networkResponse.clone());
+          return networkResponse;
+        });
+      });
+    }).catch(() => caches.match('./index.html')) // Critical: Fallback to home if totally offline and link is dead
   );
 });
