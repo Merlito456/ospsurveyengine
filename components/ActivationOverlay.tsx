@@ -6,8 +6,8 @@ import {
   Clock, Map, Camera, FileArchive, Target, ZapOff, CheckCircle, Flame,
   ShieldCheck, Layers, ChevronLeft
 } from 'lucide-react';
-import { activateSubscription, getDeviceId, ActivationResult } from '../services/authService';
-import { AboutPage } from './AboutPage';
+import { activateSubscription, getDeviceId, ActivationResult } from '../services/authService.ts';
+import { AboutPage } from './AboutPage.tsx';
 
 interface ActivationOverlayProps {
   onActivated: () => void;
@@ -177,10 +177,6 @@ export const ActivationOverlay: React.FC<ActivationOverlayProps> = ({ onActivate
               <span className="text-[8px] font-black uppercase tracking-widest">Admin</span>
             </button>
           </div>
-        </div>
-
-        <div className="w-full max-w-5xl px-4">
-           {/* Detailed comparison or info section remains as is for visual trust */}
         </div>
       </div>
     </div>
